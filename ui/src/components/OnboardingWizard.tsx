@@ -59,6 +59,8 @@ type AdapterType =
   | "opencode_local"
   | "pi_local"
   | "cursor"
+  | "copilot_cli"
+  | "process"
   | "http"
   | "openclaw_gateway";
 
@@ -70,7 +72,8 @@ const DEFAULT_TASK_DESCRIPTION = `You are the CEO. You set the direction for the
 
 export function OnboardingWizard() {
   const { onboardingOpen, onboardingOptions, closeOnboarding } = useDialog();
-  const { companies, setSelectedCompanyId, loading: companiesLoading } = useCompany();
+  const { companies, setSelectedCompanyId, loading: companiesLoading } =
+    useCompany();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,7 +86,7 @@ export function OnboardingWizard() {
       : resolveRouteOnboardingOptions({
           pathname: location.pathname,
           companyPrefix,
-          companies,
+          companies
         });
   const effectiveOnboardingOpen =
     onboardingOpen || (routeOnboardingOptions !== null && !routeDismissed);
@@ -168,10 +171,20 @@ export function OnboardingWizard() {
 
   // Backfill issue prefix for an existing company once companies are loaded.
   useEffect(() => {
-    if (!effectiveOnboardingOpen || !createdCompanyId || createdCompanyPrefix) return;
+    if (
+      !effectiveOnboardingOpen ||
+      !createdCompanyId ||
+      createdCompanyPrefix
+    )
+      return;
     const company = companies.find((c) => c.id === createdCompanyId);
     if (company) setCreatedCompanyPrefix(company.issuePrefix);
-  }, [effectiveOnboardingOpen, createdCompanyId, createdCompanyPrefix, companies]);
+  }, [
+    effectiveOnboardingOpen,
+    createdCompanyId,
+    createdCompanyPrefix,
+    companies
+  ]);
 
   // Resize textarea when step 3 is shown or description changes
   useEffect(() => {
@@ -195,18 +208,22 @@ export function OnboardingWizard() {
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
     adapterType === "opencode_local" ||
-    adapterType === "cursor";
+    adapterType === "pi_local" ||
+    adapterType === "cursor" ||
+    adapterType === "copilot_cli";
   const effectiveAdapterCommand =
     command.trim() ||
     (adapterType === "codex_local"
       ? "codex"
       : adapterType === "gemini_local"
         ? "gemini"
-      : adapterType === "cursor"
-      ? "agent"
-      : adapterType === "opencode_local"
-      ? "opencode"
-      : "claude");
+        : adapterType === "cursor"
+          ? "agent"
+          : adapterType === "opencode_local"
+            ? "opencode"
+            : adapterType === "copilot_cli"
+              ? "gh"
+              : "claude");
 
   useEffect(() => {
     if (step !== 2) return;
@@ -300,9 +317,9 @@ export function OnboardingWizard() {
           ? model || DEFAULT_CODEX_LOCAL_MODEL
           : adapterType === "gemini_local"
             ? model || DEFAULT_GEMINI_LOCAL_MODEL
-          : adapterType === "cursor"
-          ? model || DEFAULT_CURSOR_LOCAL_MODEL
-          : model,
+            : adapterType === "cursor"
+              ? model || DEFAULT_CURSOR_LOCAL_MODEL
+              : model,
       command,
       args,
       url,
@@ -723,6 +740,44 @@ export function OnboardingWizard() {
                           icon: Code,
                           desc: "Local Codex agent",
                           recommended: true
+                        },
+                        {
+                          value: "gemini_local" as const,
+                          label: "Gemini CLI",
+                          icon: Gem,
+                          desc: "Local Gemini agent"
+                        },
+                        {
+                          value: "opencode_local" as const,
+                          label: "OpenCode",
+                          icon: OpenCodeLogoIcon,
+                          desc: "Local multi-provider agent"
+                        },
+                        {
+                          value: "pi_local" as const,
+                          label: "Pi",
+                          icon: Terminal,
+                          desc: "Local Pi agent"
+                        },
+                        {
+                          value: "openclaw_gateway" as const,
+                          label: "OpenClaw Gateway",
+                          icon: Bot,
+                          desc: "Invoke OpenClaw via gateway protocol",
+                          comingSoon: true,
+                          disabledLabel: "Configure OpenClaw within the App"
+                        },
+                        {
+                          value: "cursor" as const,
+                          label: "Cursor",
+                          icon: MousePointer2,
+                          desc: "Local Cursor agent"
+                        },
+                        {
+                          value: "copilot_cli" as const,
+                          label: "GitHub Copilot",
+                          icon: Bot,
+                          desc: "Local GitHub Copilot agent"
                         }
                       ].map((opt) => (
                         <button
@@ -815,8 +870,8 @@ export function OnboardingWizard() {
                               opt.comingSoon
                                 ? "border-border opacity-40 cursor-not-allowed"
                                 : adapterType === opt.value
-                                ? "border-foreground bg-accent"
-                                : "border-border hover:bg-accent/50"
+                                  ? "border-foreground bg-accent"
+                                  : "border-border hover:bg-accent/50"
                             )}
                             onClick={() => {
                               if (opt.comingSoon) return;
@@ -859,7 +914,8 @@ export function OnboardingWizard() {
                     adapterType === "gemini_local" ||
                     adapterType === "opencode_local" ||
                     adapterType === "pi_local" ||
-                    adapterType === "cursor") && (
+                    adapterType === "cursor" ||
+                    adapterType === "copilot_cli") && (
                     <div className="space-y-3">
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">
@@ -1029,23 +1085,28 @@ export function OnboardingWizard() {
                           <p className="font-medium">Manual debug</p>
                           <p className="text-muted-foreground font-mono break-all">
                             {adapterType === "cursor"
-                              ? `${effectiveAdapterCommand} -p --mode ask --output-format json \"Respond with hello.\"`
+                              ? `${effectiveAdapterCommand} -p --mode ask --output-format json "Respond with hello."`
                               : adapterType === "codex_local"
-                              ? `${effectiveAdapterCommand} exec --json -`
-                              : adapterType === "gemini_local"
-                                ? `${effectiveAdapterCommand} --output-format json "Respond with hello."`
-                              : adapterType === "opencode_local"
-                                ? `${effectiveAdapterCommand} run --format json "Respond with hello."`
-                              : `${effectiveAdapterCommand} --print - --output-format stream-json --verbose`}
+                                ? `${effectiveAdapterCommand} exec --json -`
+                                : adapterType === "gemini_local"
+                                  ? `${effectiveAdapterCommand} --output-format json "Respond with hello."`
+                                  : adapterType === "opencode_local"
+                                    ? `${effectiveAdapterCommand} run --format json "Respond with hello."`
+                                    : adapterType === "copilot_cli"
+                                      ? `${effectiveAdapterCommand} copilot --help`
+                                      : `${effectiveAdapterCommand} --print - --output-format stream-json --verbose`}
                           </p>
                           <p className="text-muted-foreground">
                             Prompt:{" "}
-                            <span className="font-mono">Respond with hello.</span>
+                            <span className="font-mono">
+                              Respond with hello.
+                            </span>
                           </p>
                           {adapterType === "cursor" ||
                           adapterType === "codex_local" ||
                           adapterType === "gemini_local" ||
-                          adapterType === "opencode_local" ? (
+                          adapterType === "opencode_local" ||
+                          adapterType === "copilot_cli" ? (
                             <p className="text-muted-foreground">
                               If auth fails, set{" "}
                               <span className="font-mono">
@@ -1053,7 +1114,9 @@ export function OnboardingWizard() {
                                   ? "CURSOR_API_KEY"
                                   : adapterType === "gemini_local"
                                     ? "GEMINI_API_KEY"
-                                    : "OPENAI_API_KEY"}
+                                    : adapterType === "copilot_cli"
+                                      ? "GITHUB_TOKEN"
+                                      : "OPENAI_API_KEY"}
                               </span>{" "}
                               in env or run{" "}
                               <span className="font-mono">
@@ -1063,7 +1126,9 @@ export function OnboardingWizard() {
                                     ? "codex login"
                                     : adapterType === "gemini_local"
                                       ? "gemini auth"
-                                      : "opencode auth login"}
+                                      : adapterType === "copilot_cli"
+                                        ? "gh auth login"
+                                        : "opencode auth login"}
                               </span>
                               .
                             </p>
@@ -1300,14 +1365,14 @@ function AdapterEnvironmentResult({
     result.status === "pass"
       ? "Passed"
       : result.status === "warn"
-      ? "Warnings"
-      : "Failed";
+        ? "Warnings"
+        : "Failed";
   const statusClass =
     result.status === "pass"
       ? "text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10"
       : result.status === "warn"
-      ? "text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10"
-      : "text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10";
+        ? "text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10"
+        : "text-red-700 dark:text-red-300 border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10";
 
   return (
     <div className={`rounded-md border px-2.5 py-2 text-[11px] ${statusClass}`}>
